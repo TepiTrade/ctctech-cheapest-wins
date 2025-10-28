@@ -1,0 +1,18 @@
+currency_base: BRL
+exchange_rates:
+  BRL: 1.0
+  USD: 5.5
+  EUR: 6.0
+  CNY: 0.8
+platform_priority:
+- amazon
+- aliexpress
+- mercadolivre
+- shopee
+category_fallback: Importados
+min_similarity: 92
+blocklist: []
+sources:
+- data/sample_feeds/amazon.csv
+- data/sample_feeds/mercadolivre.csv
+- data/sample_feeds/shopee.csv
