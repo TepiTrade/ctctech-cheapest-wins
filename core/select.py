@@ -2,44 +2,58 @@
 import pandas as pd
 
 def _col(gdf: pd.DataFrame, candidatos):
-    """Retorna o NOME exato da coluna existente no DF, dado uma lista de candidatos em minúsculas."""
+    """Retorna o nome exato da coluna existente no DF, dado candidatos em minúsculas."""
     cols_lower = {str(c).lower(): c for c in gdf.columns}
     for nome in candidatos:
         if nome in cols_lower:
             return cols_lower[nome]
     return None
 
+def _iter_groups(groups):
+    """Normaliza 'groups' para um iterável de DataFrames."""
+    # groupby(DataFrame).groups
+    if isinstance(groups, pd.core.groupby.generic.DataFrameGroupBy):
+        return ((k, df) for k, df in groups)
+    # DataFrame único
+    if isinstance(groups, pd.DataFrame):
+        return [(None, groups)]
+    # lista/tupla de DataFrames
+    try:
+        it = iter(groups)
+        peek = next(iter(groups))
+        if isinstance(peek, pd.DataFrame):
+            return enumerate(groups)
+    except Exception:
+        pass
+    # forma desconhecida → nada a processar
+    return []
+
 def pick_winners(groups, cfg):
-    """Escolhe o item mais barato dentro de cada grupo. Tolera cabeçalhos em PT/EN: preço/preco/price/valor."""
+    """Escolhe o item mais barato em cada grupo. Aceita groupby, DF único ou lista de DFs."""
     vencedores = []
 
-    for _, gdf in groups:
-        # 1) Detecta a coluna de preço com tolerância a variações
+    for _, gdf in _iter_groups(groups):
+        # 1) Detecta coluna de preço (PT/EN)
         col_preco = _col(gdf, ['preço', 'preco', 'price', 'valor'])
-
-        # 2) Se veio algo com .name (Série, Index), extraia o NOME
         if hasattr(col_preco, "name"):
             col_preco = col_preco.name
 
-        # 3) Se não for uma coluna válida, tenta a primeira coluna numérica
+        # 2) Fallback: primeira coluna numérica
         if col_preco is None or col_preco not in gdf.columns:
             num_cols = [c for c in gdf.columns if pd.api.types.is_numeric_dtype(gdf[c])]
             col_preco = num_cols[0] if num_cols else None
 
-        # 4) Se ainda não há coluna válida, pega a primeira linha do grupo
-        if col_preco is None:
-            vencedores.append(gdf.iloc[0])
+        # 3) Se ainda não houver, pega a primeira linha
+        if col_preco is None or gdf.empty:
+            vencedores.append(gdf.iloc[0] if not gdf.empty else pd.Series())
             continue
 
-        # 5) Converte para numérico para ordenar corretamente
+        # 4) Converte e ordena
         gdf[col_preco] = pd.to_numeric(gdf[col_preco], errors='coerce')
-
-        # 6) Se tudo virou NaN, retorna a primeira linha
         if gdf[col_preco].notna().sum() == 0:
             vencedores.append(gdf.iloc[0])
             continue
 
-        # 7) Ordena pelo NOME da coluna (string), nunca por Série
         gdf_sorted = gdf.sort_values(by=[col_preco], ascending=True, kind="mergesort")
         vencedores.append(gdf_sorted.iloc[0])
 
