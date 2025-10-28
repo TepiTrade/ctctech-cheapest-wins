@@ -1,3 +1,3 @@
-title,brand,model,price,currency,shipping,fee_percent,url,image,category,platform
-Fire TV Stick Amazon Alexa,Amazon,FireTVStick,230,BRL,15,0,https://mercadolivre.com/firetv,https://img.ml/firetv.jpg,Eletrônicos,mercadolivre
-Headset Gamer XYZ 7.1,XYZ,XYZ-71,210,BRL,0,0,https://mercadolivre.com/xyz71,https://img.ml/xyz71.jpg,Games,mercadolivre
+platform,title,brand,model,price,shipping,currency,external_url,image_url,category
+mercadolivre,Smartphone ABC 128GB,ABC,ABC-128,1199.00,29.90,BRL,https://produto.mercadolivre.com.br/MLB-ABC128,https://http2.mlstatic.com/D_NQ_NP_abc-mlb.jpg,Eletrônicos > Smartphones
+mercadolivre,Fone Bluetooth Pro 5,SoundX,PRO5,89.90,0,BRL,https://produto.mercadolivre.com.br/MLB-PRO5,https://http2.mlstatic.com/D_NQ_NP_pro5-mlb.jpg,Eletrônicos > Áudio
