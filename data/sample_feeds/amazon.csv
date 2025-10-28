@@ -1,3 +1,3 @@
-title,brand,model,price,currency,shipping,fee_percent,url,image,category,platform
-Fire TV Stick Amazon Alexa,Amazon,FireTVStick,249,BRL,0,5,https://www.amazon.com.br/firetv,https://img.amazon.com/firetv.jpg,Eletrônicos,amazon
-Headset Gamer XYZ 7.1,XYZ,XYZ-71,39.9,USD,5,0,https://www.amazon.com/xyz71,https://img.amazon.com/xyz71.jpg,Games,amazon
+platform,title,brand,model,price,shipping,currency,external_url,image_url,category
+amazon,Fire TV Stick Lite,Amazon,FireTVStick,249.00,0,BRL,https://www.amazon.com.br/dp/B08C1W5N87,https://m.media-amazon.com/images/I/81.jpg,Eletrônicos > Streaming
+amazon,Fone de ouvido Gamer XYZ 7.1,XYZ,XYZ-71,39.90,0,USD,https://www.amazon.com/xyz71,https://img.amazon.com/xyz71.jpg,Eletrônicos > Áudio
