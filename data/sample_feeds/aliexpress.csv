@@ -1,0 +1,3 @@
+plataforma,título,marca,modelo,preço,frete,moeda,url_externa,url_da_imagem,categoria
+aliexpress,Smartwatch IP68,AiWatch,AW-68,89.99,0,USD,https://www.aliexpress.com/item/10001,https://ae01.alicdn.com/pic1.jpg,Eletrônicos > Wearables
+aliexpress,Mini Projetor 1080p,BeamHome,BH-M1,129.99,0,USD,https://www.aliexpress.com/item/10002,https://ae01.alicdn.com/pic2.jpg,TV & Vídeo > Projetores
