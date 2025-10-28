@@ -1,3 +1,4 @@
-platform,title,brand,model,price,shipping,currency,external_url,image_url,category
-mercadolivre,Smartphone ABC 128GB,ABC,ABC-128,1199.00,29.90,BRL,https://produto.mercadolivre.com.br/MLB-ABC128,https://http2.mlstatic.com/D_NQ_NP_abc-mlb.jpg,Eletrônicos > Smartphones
-mercadolivre,Fone Bluetooth Pro 5,SoundX,PRO5,89.90,0,BRL,https://produto.mercadolivre.com.br/MLB-PRO5,https://http2.mlstatic.com/D_NQ_NP_pro5-mlb.jpg,Eletrônicos > Áudio
+plataforma,título,marca,modelo,preço,frete,moeda,url_externa,url_da_imagem,categoria
+mercadolivre,Teclado Mecânico RGB,KeyPro,KP-RGB,189.90,0,BRL,https://produto.mercadolivre.com.br/MLB-123456,https://http2.mlstatic.com/D_NQ_NP_abc.jpg,Informática > Acessórios
+mercadolivre,Fone Bluetooth ANC 40h,SoundMax,SM-ANC40,249.00,0,BRL,https://produto.mercadolivre.com.br/MLB-654321,https://http2.mlstatic.com/D_NQ_NP_def.jpg,Áudio > Fones
+
