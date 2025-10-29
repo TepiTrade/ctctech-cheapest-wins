@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
-from typing import Any, Tuple, Generator
+from typing import Any, Tuple, Generator, Iterable
 
 def _col(gdf: pd.DataFrame, candidatos):
     cols_lower = {str(c).lower(): c for c in gdf.columns}
@@ -12,15 +12,16 @@ def _col(gdf: pd.DataFrame, candidatos):
     return None
 
 def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, None, None]:
-    """Itera apenas formatos esperados. Nunca devolve inteiros para desempacotar."""
-    # 1) GroupBy → (chave, df)
+    """Só produz (chave, DataFrame) ou DataFrame. Ignora qualquer outro tipo."""
+    # 1) GroupBy -> (k, df)
     try:
         from pandas.core.groupby.generic import DataFrameGroupBy
         if isinstance(groups, DataFrameGroupBy):
             for k, df in groups:
-                yield (k, df)
+                if isinstance(df, pd.DataFrame):
+                    yield (k, df)
             return
-    except ImportError:
+    except Exception:
         pass
     # 2) DataFrame único
     if isinstance(groups, pd.DataFrame):
@@ -30,19 +31,15 @@ def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, N
         for i, df in enumerate(groups):
             yield (i, df)
         return
-    # 4) Iterável genérico: só cede itens que sejam (k, df) ou df
-    try:
+    # 4) Iterável genérico: só aceita (k, df) ou df; ignora ints/strings/etc.
+    if isinstance(groups, Iterable):
         for item in groups:
             if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], pd.DataFrame):
                 yield item
             elif isinstance(item, pd.DataFrame):
                 yield (None, item)
-            # ignora qualquer outra coisa (ints, strings, etc.)
-    except TypeError:
-        return
 
-def _as_df_iter(groups):
-    """Filtra para devolver só DataFrames."""
+def _as_df_iter(groups) -> Generator[pd.DataFrame, None, None]:
     for item in _iter_groups(groups):
         if isinstance(item, tuple) and len(item) == 2:
             _, df = item
@@ -52,8 +49,9 @@ def _as_df_iter(groups):
             yield df
 
 def pick_winners(groups, cfg):
-    """Seleciona o item mais barato por grupo. Tolerante a cabeçalhos PT/EN."""
+    """Escolhe o mais barato em cada grupo. Tolerante a PT/EN."""
     vencedores = []
+    # IMPORTANTE: iterar APENAS DataFrames, sem desempacotar tuplas aqui
     for gdf in _as_df_iter(groups):
         if gdf is None or gdf.empty:
             continue
