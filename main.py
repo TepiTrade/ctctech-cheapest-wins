@@ -3,7 +3,7 @@ import os, glob, unicodedata
 import pandas as pd
 from core.select import pick_winners, _col  # OK: select.py NÃO importa main.py
 
-PASTA = "dados/feeds_de_amostra"
+PASTA = "data/dados/feeds_de_amostra"
 
 def _norm(s: str) -> str:
     s = str(s).strip().lower()
