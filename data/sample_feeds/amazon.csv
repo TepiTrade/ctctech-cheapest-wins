@@ -1,3 +1,4 @@
-platform,title,brand,model,price,shipping,currency,external_url,image_url,category
-amazon,Fire TV Stick Lite,Amazon,FireTVStick,249.00,0,BRL,https://www.amazon.com.br/dp/B08C1W5N87,https://m.media-amazon.com/images/I/81.jpg,Eletrônicos > Streaming
-amazon,Fone de ouvido Gamer XYZ 7.1,XYZ,XYZ-71,39.90,0,USD,https://www.amazon.com/xyz71,https://img.amazon.com/xyz71.jpg,Eletrônicos > Áudio
+titulo,preço,link,imagem
+Camisa básica,59.90,https://exemplo.com/p1,https://exemplo.com/p1.jpg
+Tênis leve,199.00,https://exemplo.com/p2,https://exemplo.com/p2.jpg
+Fone bluetooth,89.50,https://exemplo.com/p3,https://exemplo.com/p3.jpg
