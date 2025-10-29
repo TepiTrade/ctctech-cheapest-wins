@@ -12,11 +12,11 @@ def _col(gdf: pd.DataFrame, candidatos):
     return None
 
 def _iter_groups(groups):
-    """Padroniza a iteração de grupos em (chave, DataFrame)."""
+    """Padroniza a iteração de grupos em (chave, DataFrame) quando possível."""
     try:
         from pandas.core.groupby.generic import DataFrameGroupBy
     except Exception:
-        DataFrameGroupBy = tuple()  # fallback
+        DataFrameGroupBy = tuple()
 
     if isinstance(groups, DataFrameGroupBy):
         return ((k, df) for k, df in groups)
@@ -29,12 +29,22 @@ def _iter_groups(groups):
     except Exception:
         return iter([])
 
+def _as_df_iter(groups):
+    """Garante que iteramos apenas DataFrames, evitando desempacotar itens inválidos."""
+    for item in _iter_groups(groups):
+        if isinstance(item, tuple) and len(item) == 2:
+            _, df = item
+        else:
+            df = item
+        if isinstance(df, pd.DataFrame):
+            yield df
+
 def pick_winners(groups, cfg):
     """Seleciona o item mais barato de cada grupo."""
     vencedores = []
 
-    for _, gdf in _iter_groups(groups):
-        if gdf is None or not isinstance(gdf, pd.DataFrame) or gdf.empty:
+    for gdf in _as_df_iter(groups):
+        if gdf.empty:
             continue
 
         # 1) detectar coluna de preço
