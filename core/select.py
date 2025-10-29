@@ -3,6 +3,7 @@ import pandas as pd
 from typing import Any, Tuple, Generator, Iterable
 
 def _col(gdf: pd.DataFrame, candidatos):
+    """Retorna o nome exato da coluna se existir (case-insensitive)."""
     cols_lower = {str(c).lower(): c for c in gdf.columns}
     for nome in candidatos:
         n = str(nome).lower()
@@ -11,7 +12,7 @@ def _col(gdf: pd.DataFrame, candidatos):
     return None
 
 def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, None, None]:
-    """Só produz (chave, DataFrame) ou DataFrame. Ignora outros tipos."""
+    """Entrega (chave, DataFrame) ou apenas DataFrame; ignora tipos inválidos."""
     try:
         from pandas.core.groupby.generic import DataFrameGroupBy
         if isinstance(groups, DataFrameGroupBy):
@@ -23,7 +24,8 @@ def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, N
         pass
 
     if isinstance(groups, pd.DataFrame):
-        yield (None, groups); return
+        yield (None, groups)
+        return
 
     if isinstance(groups, list) and all(isinstance(df, pd.DataFrame) for df in groups):
         for i, df in enumerate(groups):
@@ -38,17 +40,14 @@ def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, N
                 yield (None, item)
 
 def _as_df_iter(groups) -> Generator[pd.DataFrame, None, None]:
-    """Converte _iter_groups em apenas DataFrames."""
+    """Itera somente DataFrames, independente do formato de entrada."""
     for item in _iter_groups(groups):
-        if isinstance(item, tuple) and len(item) == 2:
-            _, df = item
-        else:
-            df = item
+        df = item[1] if isinstance(item, tuple) and len(item) == 2 else item
         if isinstance(df, pd.DataFrame):
             yield df
 
 def pick_winners(groups, cfg):
-    """Escolhe o mais barato em cada grupo. Tolerante a PT/EN."""
+    """Seleciona o item mais barato em cada grupo."""
     vencedores = []
     for gdf in _as_df_iter(groups):
         if gdf is None or gdf.empty:
@@ -60,12 +59,14 @@ def pick_winners(groups, cfg):
             col_preco = nums[0] if nums else None
 
         if col_preco is None:
-            vencedores.append(gdf.iloc[0]); continue
+            vencedores.append(gdf.iloc[0])
+            continue
 
         gdf.loc[:, col_preco] = pd.to_numeric(gdf[col_preco], errors='coerce')
         gdf_valid = gdf.dropna(subset=[col_preco])
         if gdf_valid.empty:
-            vencedores.append(gdf.iloc[0]); continue
+            vencedores.append(gdf.iloc[0])
+            continue
 
         gdf_sorted = gdf_valid.sort_values(by=col_preco, ascending=True, kind="mergesort")
         vencedores.append(gdf_sorted.iloc[0])
