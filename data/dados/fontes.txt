@@ -1,0 +1,6 @@
+https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/amazon.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/aliexpress.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/mercadolivre.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/ela.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/shopee.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/temu.csv
