@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os, glob, unicodedata
 import pandas as pd
-from core.select import pick_winners, _col
+from core.select import pick_winners  # sem importar _col para evitar ciclo
 
 PASTA = "dados/feeds_de_amostra"
 
@@ -9,6 +9,14 @@ def _norm(s):
     s = str(s).strip().lower()
     s = unicodedata.normalize("NFKD", s)
     return "".join(ch for ch in s if not unicodedata.combining(ch))
+
+def _col(df: pd.DataFrame, candidatos):
+    cols_lower = {str(c).lower(): c for c in df.columns}
+    for nome in candidatos:
+        n = str(nome).lower()
+        if n in cols_lower:
+            return cols_lower[n]
+    return None
 
 def _carregar_csvs(pasta):
     arquivos = sorted(glob.glob(os.path.join(pasta, "*.csv")))
@@ -35,10 +43,8 @@ def _padronizar(df):
     # preço
     col_preco = _col(df, ["preço", "preco", "price", "valor"])
     if col_preco is None:
-        # cria uma coluna vazia para não quebrar
         df["preço"] = pd.NA
         col_preco = "preço"
-    # padroniza
     out = df.copy()
     out.rename(columns={col_titulo: "titulo_std", col_preco: "preco_std"}, inplace=True)
     out["titulo_norm"] = out["titulo_std"].map(_norm)
@@ -51,12 +57,8 @@ def principal():
     if df.empty:
         print("Sem dados nos CSVs.")
         return
-
-    # agrupar por título normalizado
     groups = df.groupby("titulo_norm")
     winners = pick_winners(groups, cfg={})
-
-    # salva e imprime um resumo
     saida = "vencedores.csv"
     winners.to_csv(saida, index=False)
     print(f"Vencedores: {len(winners)} linhas -> {saida}")
