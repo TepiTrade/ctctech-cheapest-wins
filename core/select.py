@@ -14,8 +14,8 @@ def _col(gdf: pd.DataFrame, candidatos):
 
 def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, None, None]:
     """
-    Só produz (chave, DataFrame) ou DataFrame. Ignora qualquer outro tipo.
-    Esta função garante que apenas objetos válidos do Pandas saiam.
+    Padroniza a iteração de grupos.
+    Produz (chave, DataFrame) ou apenas DataFrame. Ignora qualquer outro tipo.
     """
     # 1) GroupBy -> (k, df)
     try:
@@ -50,6 +50,7 @@ def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, N
 
 def _as_df_iter(groups) -> Generator[pd.DataFrame, None, None]:
     """Converte o resultado de _iter_groups em uma iteração de DataFrames puros."""
+    # Esta função faz o trabalho de desempacotamento seguro para 'pick_winners'.
     for item in _iter_groups(groups):
         if isinstance(item, tuple) and len(item) == 2:
             # Desempacota (chave, df) e pega apenas o df
@@ -61,15 +62,17 @@ def _as_df_iter(groups) -> Generator[pd.DataFrame, None, None]:
         if isinstance(df, pd.DataFrame):
             yield df
 
-# --- CORREÇÃO NA FUNÇÃO PRINCIPAL ---
+# --- FUNÇÃO PRINCIPAL CORRIGIDA ---
 def pick_winners(groups, cfg):
-    """Escolhe o mais barato em cada grupo. Tolerante a PT/EN."""
+    """
+    Escolhe o item mais barato em cada grupo. Tolerante a PT/EN.
+    A iteração foi corrigida para usar _as_df_iter.
+    """
     vencedores = []
     
-    # MUDANÇA CRUCIAL: A iteração deve usar APENAS 'gdf' e chamar '_as_df_iter',
-    # que é quem faz a limpeza e garante que só DataFrames sejam processados.
-    # A linha original com erro "for _, gdf in _iter_groups(groups):" foi removida.
-    for gdf in _as_df_iter(groups): # <-- Esta linha agora é a iteração correta
+    # CORREÇÃO APLICADA: Chama _as_df_iter e itera sobre UMA ÚNICA VARIÁVEL (gdf).
+    # Isso impede a tentativa de desempacotar um 'int' em duas variáveis.
+    for gdf in _as_df_iter(groups): 
         if gdf is None or gdf.empty:
             continue
 
