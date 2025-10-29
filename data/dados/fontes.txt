@@ -4,3 +4,4 @@ https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/fee
 https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/ela.csv
 https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/shopee.csv
 https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/temu.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/data/dados/shein.csv
