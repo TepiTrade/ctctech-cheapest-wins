@@ -1,92 +1,65 @@
 # -*- coding: utf-8 -*-
+import os, glob, unicodedata
 import pandas as pd
-from typing import Any, Tuple, Generator, Iterable
+from core.select import pick_winners, _col  # OK: select.py NÃO importa main.py
 
-def _col(gdf: pd.DataFrame, candidatos):
-    """Retorna o nome exato da coluna se existir (case-insensitive)."""
-    cols_lower = {str(c).lower(): c for c in gdf.columns}
-    for nome in candidatos:
-        n = str(nome).lower()
-        if n in cols_lower:
-            return cols_lower[n]
-    return None
+PASTA = "dados/feeds_de_amostra"
 
-def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, None, None]:
-    """
-    Padroniza a iteração de grupos.
-    Produz (chave, DataFrame) ou apenas DataFrame. Ignora qualquer outro tipo.
-    """
-    # 1) GroupBy -> (k, df)
-    try:
-        from pandas.core.groupby.generic import DataFrameGroupBy
-        if isinstance(groups, DataFrameGroupBy):
-            for k, df in groups:
-                if isinstance(df, pd.DataFrame):
-                    yield (k, df)
-            return
-    except Exception:
-        pass
+def _norm(s: str) -> str:
+    s = str(s).strip().lower()
+    s = unicodedata.normalize("NFKD", s)
+    return "".join(ch for ch in s if not unicodedata.combining(ch))
 
-    # 2) DataFrame único
-    if isinstance(groups, pd.DataFrame):
-        yield (None, groups)
+def _carregar_csvs(pasta: str) -> pd.DataFrame:
+    arquivos = sorted(glob.glob(os.path.join(pasta, "*.csv")))
+    if not arquivos:
+        return pd.DataFrame()
+    dfs = []
+    for arq in arquivos:
+        try:
+            df = pd.read_csv(arq)
+            df["fonte"] = os.path.basename(arq)
+            dfs.append(df)
+        except Exception:
+            continue
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+def _padronizar(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    # título
+    col_titulo = _col(df, ["titulo", "título", "title", "produto", "nome"])
+    if col_titulo is None:
+        df["titulo"] = df.apply(lambda r: r.astype(str).head(1).values[0], axis=1)
+        col_titulo = "titulo"
+
+    # preço
+    col_preco = _col(df, ["preço", "preco", "price", "valor"])
+    if col_preco is None:
+        df["preço"] = pd.NA
+        col_preco = "preço"
+
+    out = df.copy()
+    out.rename(columns={col_titulo: "titulo_std", col_preco: "preco_std"}, inplace=True)
+    out["titulo_norm"] = out["titulo_std"].map(_norm)
+    out["preco_std"] = pd.to_numeric(out["preco_std"], errors="coerce")
+    return out
+
+def principal():
+    df = _carregar_csvs(PASTA)
+    df = _padronizar(df)
+    if df.empty:
+        print("Sem dados nos CSVs.")
         return
 
-    # 3) Lista de DFs
-    if isinstance(groups, list) and all(isinstance(df, pd.DataFrame) for df in groups):
-        for i, df in enumerate(groups):
-            yield (i, df)
-        return
+    groups = df.groupby("titulo_norm")
+    winners = pick_winners(groups, cfg={})
 
-    # 4) Iterável genérico: aceita apenas (k, df) ou df
-    if isinstance(groups, Iterable):
-        for item in groups:
-            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], pd.DataFrame):
-                yield item
-            elif isinstance(item, pd.DataFrame):
-                yield (None, item)
+    saida = "vencedores.csv"
+    winners.to_csv(saida, index=False)
+    print(f"Itens totais: {len(df)} | Grupos: {df['titulo_norm'].nunique()} | Vencedores: {len(winners)}")
+    print(f"Arquivo gerado: {saida}")
 
-def _as_df_iter(groups) -> Generator[pd.DataFrame, None, None]:
-    """Converte _iter_groups em DataFrames puros."""
-    for item in _iter_groups(groups):
-        if isinstance(item, tuple) and len(item) == 2:
-            _, df = item
-        else:
-            df = item
-        if isinstance(df, pd.DataFrame):
-            yield df
-
-def pick_winners(groups, cfg):
-    """
-    Escolhe o item mais barato em cada grupo. Tolerante a PT/EN.
-    Itera só sobre gdf (sem desempacotar), evitando TypeError.
-    """
-    vencedores = []
-
-    for gdf in _as_df_iter(groups):
-        if gdf is None or gdf.empty:
-            continue
-
-        # Detectar coluna de preço
-        col_preco = _col(gdf, ['preço', 'preco', 'price', 'valor'])
-        if col_preco is None or col_preco not in gdf.columns:
-            nums = [c for c in gdf.columns if pd.api.types.is_numeric_dtype(gdf[c])]
-            col_preco = nums[0] if nums else None
-
-        if col_preco is None:
-            vencedores.append(gdf.iloc[0])
-            continue
-
-        # Converter para numérico
-        gdf.loc[:, col_preco] = pd.to_numeric(gdf[col_preco], errors='coerce')
-
-        gdf_valid = gdf.dropna(subset=[col_preco])
-        if gdf_valid.empty:
-            vencedores.append(gdf.iloc[0])
-            continue
-
-        # Ordenar por preço e pegar o mais barato
-        gdf_sorted = gdf_valid.sort_values(by=col_preco, ascending=True, kind="mergesort")
-        vencedores.append(gdf_sorted.iloc[0])
-
-    return pd.DataFrame(vencedores).reset_index(drop=True)
+if __name__ == "__main__":
+    principal()
