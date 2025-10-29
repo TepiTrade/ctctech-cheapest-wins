@@ -1,74 +1,98 @@
 # -*- coding: utf-8 -*-
+import os, unicodedata
 import pandas as pd
-from typing import Any, Tuple, Generator, Iterable
+from core.select import pick_winners
 
-def _col(gdf: pd.DataFrame, candidatos):
-    """Retorna o nome exato da coluna se existir (case-insensitive)."""
-    cols_lower = {str(c).lower(): c for c in gdf.columns}
+FONTE_CANDIDATOS = ["dados/fontes.txt", "data/dados/fontes.txt"]
+PASTAS_CSV = ["dados/feeds_de_amostra", "data/dados/feeds_de_amostra"]
+
+def _norm(s: str) -> str:
+    s = str(s).strip().lower()
+    s = unicodedata.normalize("NFKD", s)
+    return "".join(ch for ch in s if not unicodedata.combining(ch))
+
+def _col(df: pd.DataFrame, candidatos):
+    cols_lower = {str(c).lower(): c for c in df.columns}
     for nome in candidatos:
-        n = str(nome).lower()
-        if n in cols_lower:
-            return cols_lower[n]
+        k = str(nome).lower()
+        if k in cols_lower:
+            return cols_lower[k]
     return None
 
-def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, None, None]:
-    """Entrega (chave, DataFrame) ou apenas DataFrame; ignora tipos inválidos."""
-    try:
-        from pandas.core.groupby.generic import DataFrameGroupBy
-        if isinstance(groups, DataFrameGroupBy):
-            for k, df in groups:
-                if isinstance(df, pd.DataFrame):
-                    yield (k, df)
-            return
-    except Exception:
-        pass
+def _ler_fontes_urls() -> list[str]:
+    for caminho in FONTE_CANDIDATOS:
+        if os.path.exists(caminho):
+            with open(caminho, "r", encoding="utf-8") as f:
+                urls = [ln.strip() for ln in f if ln.strip() and not ln.strip().startswith("#")]
+            if urls:
+                print(f"Fontes (URLs): {len(urls)} de {caminho}")
+                return urls
+    return []
 
-    if isinstance(groups, pd.DataFrame):
-        yield (None, groups)
+def _carregar_de_urls(urls: list[str]) -> pd.DataFrame:
+    dfs = []
+    for u in urls:
+        try:
+            df = pd.read_csv(u, dtype=str, encoding="utf-8")
+            df["fonte"] = u
+            dfs.append(df)
+        except Exception as e:
+            print(f"Falha ao ler URL: {u} -> {e}")
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+def _carregar_de_pastas() -> pd.DataFrame:
+    from glob import glob
+    dfs = []
+    for pasta in PASTAS_CSV:
+        if os.path.isdir(pasta):
+            for arq in sorted(glob(os.path.join(pasta, "*.csv"))):
+                try:
+                    df = pd.read_csv(arq, dtype=str, encoding="utf-8")
+                    df["fonte"] = arq
+                    dfs.append(df)
+                except Exception as e:
+                    print(f"Falha ao ler arquivo: {arq} -> {e}")
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+def _padronizar(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    col_titulo = _col(df, ["titulo", "título", "title", "produto", "nome"])
+    if col_titulo is None:
+        df = df.copy()
+        df["titulo"] = df.astype(str).apply(lambda r: r.iloc[0], axis=1)
+        col_titulo = "titulo"
+    col_preco = _col(df, ["preço", "preco", "price", "valor"])
+    if col_preco is None:
+        df = df.copy()
+        df["preço"] = pd.NA
+        col_preco = "preço"
+    out = df.copy()
+    out.rename(columns={col_titulo: "titulo_std", col_preco: "preco_std"}, inplace=True)
+    out["preco_std"] = out["preco_std"].astype(str).str.replace(",", ".", regex=False)
+    out["preco_std"] = pd.to_numeric(out["preco_std"], errors="coerce")
+    out["titulo_norm"] = out["titulo_std"].map(_norm)
+    return out
+
+def principal():
+    urls = _ler_fontes_urls()
+    if urls:
+        bruto = _carregar_de_urls(urls)
+    else:
+        print("Aviso: fontes.txt não encontrado ou vazio. Usando pastas locais.")
+        bruto = _carregar_de_pastas()
+
+    base = _padronizar(bruto)
+    if base.empty:
+        print("Sem dados válidos.")
         return
 
-    if isinstance(groups, list) and all(isinstance(df, pd.DataFrame) for df in groups):
-        for i, df in enumerate(groups):
-            yield (i, df)
-        return
+    groups = base.groupby("titulo_norm")
+    winners = pick_winners(groups, cfg={})
+    winners.to_csv("vencedores.csv", index=False)
 
-    if isinstance(groups, Iterable):
-        for item in groups:
-            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], pd.DataFrame):
-                yield item
-            elif isinstance(item, pd.DataFrame):
-                yield (None, item)
+    print(f"Itens totais: {len(base)} | Grupos: {base['titulo_norm'].nunique()} | Vencedores: {len(winners)}")
+    print("Arquivo gerado: vencedores.csv")
 
-def _as_df_iter(groups) -> Generator[pd.DataFrame, None, None]:
-    """Itera somente DataFrames, independente do formato de entrada."""
-    for item in _iter_groups(groups):
-        df = item[1] if isinstance(item, tuple) and len(item) == 2 else item
-        if isinstance(df, pd.DataFrame):
-            yield df
-
-def pick_winners(groups, cfg):
-    """Seleciona o item mais barato em cada grupo."""
-    vencedores = []
-    for gdf in _as_df_iter(groups):
-        if gdf is None or gdf.empty:
-            continue
-
-        col_preco = _col(gdf, ['preço', 'preco', 'price', 'valor'])
-        if col_preco is None or col_preco not in gdf.columns:
-            nums = [c for c in gdf.columns if pd.api.types.is_numeric_dtype(gdf[c])]
-            col_preco = nums[0] if nums else None
-
-        if col_preco is None:
-            vencedores.append(gdf.iloc[0])
-            continue
-
-        gdf.loc[:, col_preco] = pd.to_numeric(gdf[col_preco], errors='coerce')
-        gdf_valid = gdf.dropna(subset=[col_preco])
-        if gdf_valid.empty:
-            vencedores.append(gdf.iloc[0])
-            continue
-
-        gdf_sorted = gdf_valid.sort_values(by=col_preco, ascending=True, kind="mergesort")
-        vencedores.append(gdf_sorted.iloc[0])
-
-    return pd.DataFrame(vencedores).reset_index(drop=True)
+if __name__ == "__main__":
+    principal()
