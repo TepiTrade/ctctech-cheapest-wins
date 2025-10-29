@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
+from typing import Any, Tuple, Generator
 
 def _col(gdf: pd.DataFrame, candidatos):
-    """Retorna o nome exato da coluna se existir (case-insensitive)."""
     cols_lower = {str(c).lower(): c for c in gdf.columns}
     for nome in candidatos:
         n = str(nome).lower()
@@ -11,26 +11,38 @@ def _col(gdf: pd.DataFrame, candidatos):
             return cols_lower[n]
     return None
 
-def _iter_groups(groups):
-    """Padroniza a iteração de grupos em (chave, DataFrame) quando possível."""
+def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, None, None]:
+    """Itera apenas formatos esperados. Nunca devolve inteiros para desempacotar."""
+    # 1) GroupBy → (chave, df)
     try:
         from pandas.core.groupby.generic import DataFrameGroupBy
-    except Exception:
-        DataFrameGroupBy = tuple()
-
-    if isinstance(groups, DataFrameGroupBy):
-        return ((k, df) for k, df in groups)
+        if isinstance(groups, DataFrameGroupBy):
+            for k, df in groups:
+                yield (k, df)
+            return
+    except ImportError:
+        pass
+    # 2) DataFrame único
     if isinstance(groups, pd.DataFrame):
-        return [(None, groups)]
+        yield (None, groups); return
+    # 3) Lista de DFs
     if isinstance(groups, list) and all(isinstance(df, pd.DataFrame) for df in groups):
-        return enumerate(groups)
+        for i, df in enumerate(groups):
+            yield (i, df)
+        return
+    # 4) Iterável genérico: só cede itens que sejam (k, df) ou df
     try:
-        return iter(groups)
-    except Exception:
-        return iter([])
+        for item in groups:
+            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], pd.DataFrame):
+                yield item
+            elif isinstance(item, pd.DataFrame):
+                yield (None, item)
+            # ignora qualquer outra coisa (ints, strings, etc.)
+    except TypeError:
+        return
 
 def _as_df_iter(groups):
-    """Garante que iteramos apenas DataFrames, evitando desempacotar itens inválidos."""
+    """Filtra para devolver só DataFrames."""
     for item in _iter_groups(groups):
         if isinstance(item, tuple) and len(item) == 2:
             _, df = item
@@ -40,36 +52,25 @@ def _as_df_iter(groups):
             yield df
 
 def pick_winners(groups, cfg):
-    """Seleciona o item mais barato de cada grupo."""
+    """Seleciona o item mais barato por grupo. Tolerante a cabeçalhos PT/EN."""
     vencedores = []
-
     for gdf in _as_df_iter(groups):
-        if gdf.empty:
+        if gdf is None or gdf.empty:
             continue
 
-        # 1) detectar coluna de preço
         col_preco = _col(gdf, ['preço', 'preco', 'price', 'valor'])
         if col_preco is None or col_preco not in gdf.columns:
-            num_cols = [c for c in gdf.columns if pd.api.types.is_numeric_dtype(gdf[c])]
-            col_preco = num_cols[0] if num_cols else None
+            nums = [c for c in gdf.columns if pd.api.types.is_numeric_dtype(gdf[c])]
+            col_preco = nums[0] if nums else None
 
-        # 2) fallback se não houver coluna válida
         if col_preco is None:
-            vencedores.append(gdf.iloc[0])
-            continue
+            vencedores.append(gdf.iloc[0]); continue
 
-        # 3) converter a número e filtrar válidos
-        gdf[col_preco] = pd.to_numeric(gdf[col_preco], errors='coerce')
-        if gdf[col_preco].notna().sum() == 0:
-            vencedores.append(gdf.iloc[0])
-            continue
-
+        gdf.loc[:, col_preco] = pd.to_numeric(gdf[col_preco], errors='coerce')
         gdf_valid = gdf.dropna(subset=[col_preco])
         if gdf_valid.empty:
-            vencedores.append(gdf.iloc[0])
-            continue
+            vencedores.append(gdf.iloc[0]); continue
 
-        # 4) ordenar por preço e pegar o mais barato
         gdf_sorted = gdf_valid.sort_values(by=col_preco, ascending=True, kind="mergesort")
         vencedores.append(gdf_sorted.iloc[0])
 
