@@ -1,46 +1,92 @@
-import os, sys, argparse, pandas as pd
-from adapters.csv_adapter import load_sources
-from core.normalize import normalize_record_df
-from core.match import build_groups
-from core.select import pick_winners
-from core.woo import WooClient, upsert_products
-import yaml
+# -*- coding: utf-8 -*-
+import pandas as pd
+from typing import Any, Tuple, Generator, Iterable
 
-def load_config():
-    with open("config.yaml", "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+def _col(gdf: pd.DataFrame, candidatos):
+    """Retorna o nome exato da coluna se existir (case-insensitive)."""
+    cols_lower = {str(c).lower(): c for c in gdf.columns}
+    for nome in candidatos:
+        n = str(nome).lower()
+        if n in cols_lower:
+            return cols_lower[n]
+    return None
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true")
-    args = ap.parse_args()
+def _iter_groups(groups) -> Generator[Tuple[Any, pd.DataFrame] | pd.DataFrame, None, None]:
+    """
+    Padroniza a iteração de grupos.
+    Produz (chave, DataFrame) ou apenas DataFrame. Ignora qualquer outro tipo.
+    """
+    # 1) GroupBy -> (k, df)
+    try:
+        from pandas.core.groupby.generic import DataFrameGroupBy
+        if isinstance(groups, DataFrameGroupBy):
+            for k, df in groups:
+                if isinstance(df, pd.DataFrame):
+                    yield (k, df)
+            return
+    except Exception:
+        pass
 
-    cfg = load_config()
-    df = load_sources(cfg["sources"])
-    if df.empty:
-        print("Nenhum item carregado das fontes."); return
-
-    df = normalize_record_df(df, cfg)
-    groups = build_groups(df, min_similarity=cfg.get("min_similarity", 92))
-    winners = pick_winners(groups, cfg)
-
-    print(f"Itens totais: {len(df)}  | Grupos: {len(groups)}  | Vencedores: {len(winners)}")
-
-    if args.dry_run:
-        print(winners.head(20).to_string(index=False))
+    # 2) DataFrame único
+    if isinstance(groups, pd.DataFrame):
+        yield (None, groups)
         return
 
-    base_url = os.getenv("WC_BASE_URL")
-    ck = os.getenv("WC_CK")
-    cs = os.getenv("WC_CS")
-    button_text = os.getenv("DEFAULT_BUTTON_TEXT", "Comprar")
-    default_currency = os.getenv("DEFAULT_CURRENCY", "BRL")
+    # 3) Lista de DFs
+    if isinstance(groups, list) and all(isinstance(df, pd.DataFrame) for df in groups):
+        for i, df in enumerate(groups):
+            yield (i, df)
+        return
 
-    if not all([base_url, ck, cs]):
-        print("Secrets faltando: WC_BASE_URL, WC_CK, WC_CS"); sys.exit(1)
+    # 4) Iterável genérico: aceita apenas (k, df) ou df
+    if isinstance(groups, Iterable):
+        for item in groups:
+            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], pd.DataFrame):
+                yield item
+            elif isinstance(item, pd.DataFrame):
+                yield (None, item)
 
-    wc = WooClient(base_url, ck, cs, default_currency, button_text)
-    upsert_products(wc, winners, cfg)
+def _as_df_iter(groups) -> Generator[pd.DataFrame, None, None]:
+    """Converte _iter_groups em DataFrames puros."""
+    for item in _iter_groups(groups):
+        if isinstance(item, tuple) and len(item) == 2:
+            _, df = item
+        else:
+            df = item
+        if isinstance(df, pd.DataFrame):
+            yield df
 
-if __name__ == "__main__":
-    main()
+def pick_winners(groups, cfg):
+    """
+    Escolhe o item mais barato em cada grupo. Tolerante a PT/EN.
+    Itera só sobre gdf (sem desempacotar), evitando TypeError.
+    """
+    vencedores = []
+
+    for gdf in _as_df_iter(groups):
+        if gdf is None or gdf.empty:
+            continue
+
+        # Detectar coluna de preço
+        col_preco = _col(gdf, ['preço', 'preco', 'price', 'valor'])
+        if col_preco is None or col_preco not in gdf.columns:
+            nums = [c for c in gdf.columns if pd.api.types.is_numeric_dtype(gdf[c])]
+            col_preco = nums[0] if nums else None
+
+        if col_preco is None:
+            vencedores.append(gdf.iloc[0])
+            continue
+
+        # Converter para numérico
+        gdf.loc[:, col_preco] = pd.to_numeric(gdf[col_preco], errors='coerce')
+
+        gdf_valid = gdf.dropna(subset=[col_preco])
+        if gdf_valid.empty:
+            vencedores.append(gdf.iloc[0])
+            continue
+
+        # Ordenar por preço e pegar o mais barato
+        gdf_sorted = gdf_valid.sort_values(by=col_preco, ascending=True, kind="mergesort")
+        vencedores.append(gdf_sorted.iloc[0])
+
+    return pd.DataFrame(vencedores).reset_index(drop=True)
