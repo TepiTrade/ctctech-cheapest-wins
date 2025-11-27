@@ -21,6 +21,17 @@ MAX_PRODUTOS_POR_EXECUCAO = int(os.getenv("MAX_PRODUTOS_POR_EXECUCAO", "200"))
 MAX_PRODUTOS_POR_FONTE = int(os.getenv("MAX_PRODUTOS_POR_FONTE", "200"))
 TAMANHO_LOTE_WC = 50  # produtos por lote no WooCommerce
 
+# FEEDS REMOTOS DE EXEMPLO (dentro do próprio repositório)
+FEED_URLS: List[str] = [
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/feeds%20de%20amostra/amazon.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/feeds%20de%20amostra/aliexpress.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/feeds%20de%20amostra/mercadolivre.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/feeds%20de%20amostra/ela.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/feeds%20de%20amostra/shopee.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/feeds%20de%20amostra/temu.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/dados/shein.csv",
+]
+
 
 def get_config() -> Dict[str, str]:
     """
@@ -58,23 +69,11 @@ def get_local_csv_files() -> List[str]:
 
 def get_feed_urls() -> List[str]:
     """
-    Lê URLs de feeds CSV a partir de dados/dados/fontes.txt (uma por linha).
+    Retorna a lista de URLs de feeds CSV remotos.
+    (Neste momento, usa apenas FEED_URLS embutido no código.)
     """
-    path = os.path.join(DATA_DIR, "fontes.txt")
-    if not os.path.exists(path):
-        logging.warning("Arquivo fontes.txt não encontrado em %s", path)
-        return []
-
-    urls: List[str] = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            urls.append(line)
-
-    logging.info("Encontradas %s URLs em fontes.txt", len(urls))
-    return urls
+    logging.info("Usando %s feeds remotos configurados em FEED_URLS.", len(FEED_URLS))
+    return FEED_URLS
 
 
 def _normalize_row(row: Dict[str, str]) -> Dict[str, str]:
@@ -202,9 +201,18 @@ def load_products_from_local_csv(path: str, cfg: Dict[str, str]) -> List[Dict]:
 
 def load_products_from_url_csv(url: str, cfg: Dict[str, str]) -> List[Dict]:
     logging.info("Baixando CSV remoto: %s", url)
-    resp = requests.get(url, timeout=60)
-    resp.raise_for_status()
+    try:
+        resp = requests.get(url, timeout=60)
+        resp.raise_for_status()
+    except Exception as e:
+        logging.error("Erro ao baixar feed %s: %s", url, e)
+        return []
+
     lines = resp.text.splitlines()
+    if not lines:
+        logging.warning("Feed vazio: %s", url)
+        return []
+
     reader = csv.DictReader(lines)
     return _load_from_dict_reader(reader, cfg, MAX_PRODUTOS_POR_FONTE)
 
@@ -273,7 +281,7 @@ def main() -> None:
                 break
             todos_os_produtos.append(p)
 
-    # 2) CSVs remotos (URLs em fontes.txt)
+    # 2) CSVs remotos (URLs em FEED_URLS)
     for url in get_feed_urls():
         if len(todos_os_produtos) >= MAX_PRODUTOS_POR_EXECUCAO:
             logging.info(
