@@ -1,4 +1,4 @@
-name: Ingestão contínua
+name: Ingestao continua
 
 on:
   workflow_dispatch:
@@ -6,18 +6,23 @@ on:
     - cron: "0 * * * *"
 
 jobs:
-  run:
+  continua:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Instalar dependências
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requisitos.txt
-      - name: Rodar migrador
+
+      - name: Rodar bot
         env:
           WC_BASE_URL: ${{ secrets.WC_BASE_URL }}
           WC_CK: ${{ secrets.WC_CK }}
