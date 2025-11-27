@@ -14,7 +14,7 @@ logging.basicConfig(
 
 # Diretórios
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "dados", "dados")
+DATA_DIR = os.path.join(BASE_DIR, "data", "dados")
 
 # Limites de segurança
 MAX_PRODUTOS_POR_EXECUCAO = int(os.getenv("MAX_PRODUTOS_POR_EXECUCAO", "200"))
