@@ -3,6 +3,7 @@ import csv
 import glob
 import logging
 from typing import List, Dict
+import io
 
 import requests
 
@@ -11,6 +12,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
+
+# Pasta onde ficam fontes.txt e os CSVs locais
+DATA_DIR = os.path.join("dados", "dados")
 
 
 def get_config() -> Dict[str, str]:
@@ -36,9 +40,29 @@ def get_config() -> Dict[str, str]:
     }
 
 
+def get_source_urls() -> List[str]:
+    """Lê a lista de URLs de feeds em dados/dados/fontes.txt, se existir."""
+    path = os.path.join(DATA_DIR, "fontes.txt")
+    urls: List[str] = []
+
+    if not os.path.exists(path):
+        logging.warning("Arquivo fontes.txt não encontrado em %s", path)
+        return urls
+
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            urls.append(line)
+
+    logging.info("Encontradas %d fontes em fontes.txt", len(urls))
+    return urls
+
+
 def find_csv_files() -> List[str]:
-    """Procura arquivos CSV na pasta 'dados'."""
-    pattern = os.path.join("dados", "*.csv")
+    """Procura arquivos CSV locais na pasta dados/dados/."""
+    pattern = os.path.join(DATA_DIR, "*.csv")
     files = sorted(glob.glob(pattern))
     return files
 
@@ -113,7 +137,7 @@ def parse_product_row(row: Dict[str, str], cfg: Dict[str, str]) -> Dict:
 
     meta_data = []
 
-    # Exemplo de uso de texto padrão do botão (caso queira guardar como meta)
+    # Guarda texto padrão do botão, se quiser usar depois
     if cfg.get("button_text"):
         meta_data.append(
             {"key": "_ctctech_button_text", "value": cfg["button_text"]}
@@ -144,7 +168,7 @@ def parse_product_row(row: Dict[str, str], cfg: Dict[str, str]) -> Dict:
 
 
 def load_products_from_csv(path: str, cfg: Dict[str, str]) -> List[Dict]:
-    logging.info(f"Lendo CSV: {path}")
+    logging.info(f"Lendo CSV local: {path}")
     products: List[Dict] = []
 
     with open(path, newline="", encoding="utf-8") as f:
@@ -155,6 +179,24 @@ def load_products_from_csv(path: str, cfg: Dict[str, str]) -> List[Dict]:
                 products.append(p)
 
     logging.info(f"Encontrados {len(products)} produtos válidos em {path}")
+    return products
+
+
+def load_products_from_remote_csv(url: str, cfg: Dict[str, str]) -> List[Dict]:
+    logging.info(f"Baixando feed remoto: {url}")
+    resp = requests.get(url, timeout=120)
+    resp.raise_for_status()
+
+    products: List[Dict] = []
+    f = io.StringIO(resp.text)
+    reader = csv.DictReader(f)
+
+    for row in reader:
+        p = parse_product_row(row, cfg)
+        if p:
+            products.append(p)
+
+    logging.info(f"Encontrados {len(products)} produtos válidos em {url}")
     return products
 
 
@@ -170,7 +212,7 @@ def send_to_woocommerce(products: List[Dict], cfg: Dict[str, str]) -> None:
 
     url = f"{base_url}/wp-json/wc/v3/products/batch"
 
-    # WooCommerce aceita batch de até 100 por vez com segurança
+    # WooCommerce aceita batch de até ~100 por vez com segurança
     batch_size = 50
     total = len(products)
     sent = 0
@@ -209,20 +251,31 @@ def main() -> None:
 
     cfg = get_config()
     csv_files = find_csv_files()
+    source_urls = get_source_urls()
 
-    if not csv_files:
+    if not csv_files and not source_urls:
         print("Sem dados nos CSVs.")
-        logging.warning("Nenhum arquivo CSV encontrado na pasta 'dados/'.")
+        logging.warning(
+            "Nenhum arquivo CSV local em %s e nenhuma URL em fontes.txt.",
+            DATA_DIR,
+        )
         return
 
     all_products: List[Dict] = []
+
+    # CSVs locais (ex.: shein.csv)
     for path in csv_files:
         prods = load_products_from_csv(path, cfg)
         all_products.extend(prods)
 
+    # Feeds remotos (Amazon, Shopee, Mercado Livre, AliExpress, etc.)
+    for url in source_urls:
+        prods = load_products_from_remote_csv(url, cfg)
+        all_products.extend(prods)
+
     if not all_products:
-        print("Sem produtos válidos encontrados nos CSVs.")
-        logging.warning("Arquivos CSV encontrados, mas sem produtos válidos.")
+        print("Sem produtos válidos encontrados nos feeds.")
+        logging.warning("Feeds processados, mas sem produtos válidos.")
         return
 
     send_to_woocommerce(all_products, cfg)
