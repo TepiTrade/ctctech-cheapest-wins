@@ -268,7 +268,7 @@ def main() -> None:
         prods = load_products_from_csv(path, cfg)
         all_products.extend(prods)
 
-    # Feeds remotos (Amazon, Shopee, Mercado Livre, AliExpress, etc.)
+    # Feeds remotos (Amazon, Shopee, Mercado Livre, AliExpress etc.)
     for url in source_urls:
         prods = load_products_from_remote_csv(url, cfg)
         all_products.extend(prods)
