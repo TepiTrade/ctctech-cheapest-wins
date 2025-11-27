@@ -6,22 +6,64 @@ from typing import List, Dict
 
 import requests
 
+# -------------------------------------------------------------------
 # Log básico
+# -------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-# Diretórios
+# -------------------------------------------------------------------
+# Diretórios de dados
+# -------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data", "dados")
 
+# Candidatos onde podemos ter CSVs:
+# - dados/dados
+# - dados/feeds_de_amostra
+# - data/dados
+# - data/feeds_de_amostra
+CANDIDATE_DATA_DIRS = [
+    os.path.join(BASE_DIR, "dados", "dados"),
+    os.path.join(BASE_DIR, "dados", "feeds_de_amostra"),
+    os.path.join(BASE_DIR, "data", "dados"),
+    os.path.join(BASE_DIR, "data", "feeds_de_amostra"),
+]
+
+
+def discover_data_dirs() -> List[str]:
+    """
+    Descobre quais diretórios de dados realmente existem no repositório.
+    """
+    found: List[str] = []
+    for d in CANDIDATE_DATA_DIRS:
+        if os.path.isdir(d):
+            found.append(d)
+
+    if not found:
+        logging.warning(
+            "Nenhum diretório de dados encontrado. "
+            "Verifique a estrutura do repositório."
+        )
+    else:
+        logging.info(
+            "Diretórios de dados detectados: %s", ", ".join(found)
+        )
+    return found
+
+
+# -------------------------------------------------------------------
 # Limites de segurança
+# -------------------------------------------------------------------
 MAX_PRODUTOS_POR_EXECUCAO = int(os.getenv("MAX_PRODUTOS_POR_EXECUCAO", "200"))
 MAX_PRODUTOS_POR_FONTE = int(os.getenv("MAX_PRODUTOS_POR_FONTE", "200"))
 TAMANHO_LOTE_WC = 50  # produtos por lote no WooCommerce
 
 
+# -------------------------------------------------------------------
+# Configuração WooCommerce
+# -------------------------------------------------------------------
 def get_config() -> Dict[str, str]:
     """
     Lê configuração a partir dos segredos do GitHub (variáveis de ambiente).
@@ -46,39 +88,57 @@ def get_config() -> Dict[str, str]:
     }
 
 
+# -------------------------------------------------------------------
+# Descoberta de CSVs locais e feeds remotos
+# -------------------------------------------------------------------
 def get_local_csv_files() -> List[str]:
     """
-    Retorna todos os arquivos CSV locais em dados/dados/*.csv
-    (por exemplo, dados/dados/shein.csv, dados/dados/amazon.csv, etc.)
+    Retorna todos os arquivos CSV locais nos diretórios de dados detectados.
     """
-    pattern = os.path.join(DATA_DIR, "*.csv")
-    files = sorted(glob.glob(pattern))
-    logging.info("Encontrados %s arquivos CSV locais em %s", len(files), DATA_DIR)
-    return files
+    csv_files: List[str] = []
+    data_dirs = discover_data_dirs()
+
+    for d in data_dirs:
+        pattern = os.path.join(d, "*.csv")
+        found = sorted(glob.glob(pattern))
+        logging.info("Encontrados %s arquivos CSV em %s", len(found), d)
+        csv_files.extend(found)
+
+    return csv_files
 
 
 def get_feed_urls() -> List[str]:
     """
-    Lê URLs de feeds CSV a partir de dados/dados/fontes.txt (uma por linha).
-    Se o arquivo não existir, simplesmente não usa feeds remotos.
+    Lê URLs de feeds CSV a partir de arquivos fontes.txt, se existirem.
+    - Procura fontes.txt em cada diretório de dados detectado.
+    - Se não existir, apenas ignora (sem WARNING).
     """
-    path = os.path.join(DATA_DIR, "fontes.txt")
-    if not os.path.exists(path):
-        logging.warning("Arquivo fontes.txt não encontrado em %s", path)
-        return []
-
     urls: List[str] = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            urls.append(line)
+    data_dirs = discover_data_dirs()
 
-    logging.info("Encontradas %s URLs em fontes.txt", len(urls))
+    for d in data_dirs:
+        path = os.path.join(d, "fontes.txt")
+        if not os.path.exists(path):
+            continue
+
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                urls.append(line)
+
+    if urls:
+        logging.info("Encontradas %s URLs em fontes.txt", len(urls))
+    else:
+        logging.info("Nenhuma URL em fontes.txt (feeds remotos não utilizados).")
+
     return urls
 
 
+# -------------------------------------------------------------------
+# Utilitários de normalização de linhas
+# -------------------------------------------------------------------
 def _normalize_row(row: Dict[str, str]) -> Dict[str, str]:
     """
     Normaliza chaves e valores do CSV para facilitar o mapeamento.
@@ -101,18 +161,19 @@ def row_to_product(row: Dict[str, str], cfg: Dict[str, str]) -> Dict:
     """
     Converte uma linha do CSV em objeto de produto WooCommerce.
     Aceita cabeçalhos em português ou inglês.
-    Campos esperados no CSV (nomes possíveis):
+
+    Campos possíveis no CSV:
       - name / nome
       - regular_price / preço_normal / preco_normal
       - sale_price / preço_de_venda / preco_de_venda (opcional)
       - sku
       - description / descrição / descricao
       - short_description / descrição_curta / descricao_curta
-      - categories / categorias  (separadas por vírgula)
-      - tags / etiquetas          (separadas por vírgula)
-      - images / imagens          (URLs separadas por | )
-      - type / tipo               (simple, external, etc; default simple)
-      - affiliate_url / link      (URL de afiliado completa)
+      - categories / categorias           (separadas por vírgula)
+      - tags / etiquetas                  (separadas por vírgula)
+      - images / imagens                  (URLs separadas por | )
+      - type / tipo                       (simple, external, etc; default simple)
+      - affiliate_url / link              (URL de afiliado completa)
     """
     norm = _normalize_row(row)
 
@@ -223,6 +284,9 @@ def load_products_from_url_csv(url: str, cfg: Dict[str, str]) -> List[Dict]:
     return _load_from_dict_reader(reader, cfg, MAX_PRODUTOS_POR_FONTE)
 
 
+# -------------------------------------------------------------------
+# Envio para WooCommerce
+# -------------------------------------------------------------------
 def send_to_woocommerce(produtos: List[Dict], cfg: Dict[str, str]) -> None:
     if not produtos:
         logging.info("Nenhum produto para enviar ao WooCommerce.")
@@ -242,7 +306,9 @@ def send_to_woocommerce(produtos: List[Dict], cfg: Dict[str, str]) -> None:
         payload = {"create": lote}
 
         logging.info(
-            "Enviando lote %s (%s produtos)...", (i // TAMANHO_LOTE_WC) + 1, len(lote)
+            "Enviando lote %s (%s produtos)...",
+            (i // TAMANHO_LOTE_WC) + 1,
+            len(lote),
         )
 
         resp = requests.post(url, auth=(ck, cs), json=payload, timeout=120)
@@ -265,14 +331,16 @@ def send_to_woocommerce(produtos: List[Dict], cfg: Dict[str, str]) -> None:
     logging.info("Envio concluído. Total de produtos criados: %s", enviado)
 
 
+# -------------------------------------------------------------------
+# Função principal
+# -------------------------------------------------------------------
 def main() -> None:
     logging.info("Iniciando migração automática de produtos afiliados...")
 
     cfg = get_config()
-
     todos_os_produtos: List[Dict] = []
 
-    # 1) CSVs locais em dados/dados/*.csv
+    # 1) CSVs locais em diretórios de dados detectados
     for path in get_local_csv_files():
         if len(todos_os_produtos) >= MAX_PRODUTOS_POR_EXECUCAO:
             logging.info(
@@ -287,7 +355,7 @@ def main() -> None:
                 break
             todos_os_produtos.append(p)
 
-    # 2) CSVs remotos (URLs em fontes.txt)
+    # 2) CSVs remotos (URLs em fontes.txt – se existirem)
     for url in get_feed_urls():
         if len(todos_os_produtos) >= MAX_PRODUTOS_POR_EXECUCAO:
             logging.info(
