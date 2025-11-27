@@ -14,7 +14,8 @@ logging.basicConfig(
 )
 
 # Pasta onde ficam fontes.txt e os CSVs locais
-DATA_DIR = os.path.join("dados", "dados")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "dados", "dados")
 
 
 def get_config() -> Dict[str, str]:
