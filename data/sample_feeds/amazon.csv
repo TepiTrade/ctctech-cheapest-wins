@@ -1,4 +1,2 @@
-titulo,preço,link,imagem
-Camisa básica,59.90,https://exemplo.com/p1,https://exemplo.com/p1.jpg
-Tênis leve,199.00,https://exemplo.com/p2,https://exemplo.com/p2.jpg
-Fone bluetooth,89.50,https://exemplo.com/p3,https://exemplo.com/p3.jpg
+nome,preco_normal,link,imagens
+"Aventais de cozinha para cozinhar com bolsos Aventais de churrasco para homens e mulheres","15.38","https://www.amazon.com.br/Aventais-cozinha-cozinhar-churrasco-mulheres/dp/B0FG1MY215?pd_rd_w=oRFKU&content-id=amzn1.sym.550666bb-9d24-483d-bc9e-4a297db376ce&pf_rd_p=550666bb-9d24-483d-bc9e-4a297db376ce&pf_rd_r=BPS79SJDYGBRDB166DCT&pd_rd_wg=6DOJ4&pd_rd_r=18ec3082-77a0-4310-853f-c23f600c5fdc&pd_rd_i=B0G453W2R6&th=1&linkCode=ll1&tag=ctctechstore-20&linkId=a48c5e87bea484341a07f7faa924d83b&language=pt_BR&ref_=as_li_ss_tl","https://m.media-amazon.com/images/I/41mPrrWGLTL._AC_SR38,50_.jpg|https://m.media-amazon.com/images/I/51HcjI-PJmL._AC_SR38,50_.jpg|https://m.media-amazon.com/images/I/517zEjbcrgL._AC_SR38,50_.jpg|https://m.media-amazon.com/images/I/51ZYKnW-sbL._AC_SR38,50_.jpg"
