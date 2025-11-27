@@ -1,210 +1,199 @@
 import os
 import csv
-import glob
 import logging
-from typing import List, Dict
-import io
-
+from typing import List, Dict, Optional
 import requests
-
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-# Pasta onde ficam fontes.txt e os CSVs locais
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "dados", "dados")
+# URLs dos feeds CSV – depois você troca pelos feeds reais (Magalu, Amazon, Shopee etc.)
+FEED_URLS: List[str] = [
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/amazon.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/aliexpress.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/mercadolivre.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/ela.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/shopee.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds_de_amostra/temu.csv",
+    "https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/dados/shein.csv",
+]
 
 
 def get_config() -> Dict[str, str]:
-    """Lê variáveis de ambiente vindas dos secrets do GitHub."""
+    """Lê as variáveis de ambiente vindas dos segredos do GitHub."""
     base_url = os.environ.get("WC_BASE_URL", "").rstrip("/")
     ck = os.environ.get("WC_CK", "")
     cs = os.environ.get("WC_CS", "")
+    default_button_text = os.environ.get("DEFAULT_BUTTON_TEXT", "Comprar agora")
+    default_currency = os.environ.get("DEFAULT_CURRENCY", "BRL")
 
     if not base_url or not ck or not cs:
-        raise RuntimeError(
-            "WC_BASE_URL, WC_CK ou WC_CS não configurados nos secrets."
-        )
-
-    button_text = os.environ.get("DEFAULT_BUTTON_TEXT", "Comprar agora")
-    currency = os.environ.get("DEFAULT_CURRENCY", "BRL")
+        raise RuntimeError("WC_BASE_URL, WC_CK ou WC_CS não configurados nos segredos.")
 
     return {
         "base_url": base_url,
         "ck": ck,
         "cs": cs,
-        "button_text": button_text,
-        "currency": currency,
+        "button_text": default_button_text,
+        "currency": default_currency,
     }
 
 
-def get_source_urls() -> List[str]:
-    """Lê a lista de URLs de feeds em dados/dados/fontes.txt, se existir."""
-    path = os.path.join(DATA_DIR, "fontes.txt")
-    urls: List[str] = []
-
-    if not os.path.exists(path):
-        logging.warning("Arquivo fontes.txt não encontrado em %s", path)
-        return urls
-
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            urls.append(line)
-
-    logging.info("Encontradas %d fontes em fontes.txt", len(urls))
-    return urls
+def _first_non_empty(row: Dict[str, str], keys: List[str]) -> str:
+    for k in keys:
+        v = row.get(k)
+        if v is not None:
+            v = str(v).strip()
+            if v:
+                return v
+    return ""
 
 
-def find_csv_files() -> List[str]:
-    """Procura arquivos CSV locais na pasta dados/dados/."""
-    pattern = os.path.join(DATA_DIR, "*.csv")
-    files = sorted(glob.glob(pattern))
-    return files
+def parse_product_row(row: Dict[str, str], cfg: Dict[str, str]) -> Optional[Dict]:
+    """Converte uma linha do CSV em produto WooCommerce."""
+    name = _first_non_empty(row, ["Name", "nome", "title", "Título"])
+    sku = _first_non_empty(row, ["SKU", "sku", "codigo", "código"])
 
-
-def parse_product_row(row: Dict[str, str], cfg: Dict[str, str]) -> Dict:
-    """Converte uma linha do CSV em um objeto de produto WooCommerce."""
-    # Normaliza chaves para minúsculas
-    normalized = {k.lower().strip(): (v or "").strip() for k, v in row.items()}
-
-    name = normalized.get("name") or normalized.get("nome")
-    regular_price = normalized.get("regular price") or normalized.get("regular_price")
-    sku = normalized.get("sku")
-
-    if not name or not regular_price:
-        # Linha inválida para criação de produto
-        return {}
-
-    sale_price = normalized.get("sale price") or normalized.get("sale_price") or ""
-    description = (
-        normalized.get("description")
-        or normalized.get("descricao")
-        or ""
+    regular_price_str = _first_non_empty(
+        row,
+        ["Regular price", "regular_price", "preco_normal", "preço_normal", "price"],
     )
-    short_description = (
-        normalized.get("short description")
-        or normalized.get("short_description")
-        or ""
+    sale_price_str = _first_non_empty(
+        row,
+        ["Sale price", "sale_price", "preco_de_venda", "preço_de_venda", "promo_price"],
     )
 
-    # Categorias
-    categories_raw = (
-        normalized.get("categories")
-        or normalized.get("categoria")
-        or normalized.get("categorias")
-        or ""
+    if not name or not regular_price_str:
+        return None
+
+    def _to_float(s: str) -> float:
+        s = s.replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".")
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
+
+    regular_price = _to_float(regular_price_str)
+    sale_price = _to_float(sale_price_str) if sale_price_str else 0.0
+
+    description = _first_non_empty(
+        row, ["Description", "descricao", "descrição", "Long description"]
     )
-    categories = []
+    short_description = _first_non_empty(
+        row, ["Short description", "descricao_curta", "descrição_curta"]
+    )
+
+    categories_raw = _first_non_empty(row, ["Categories", "categorias", "categoria"])
+    categories: List[Dict[str, str]] = []
     if categories_raw:
-        for part in categories_raw.replace("|", ",").split(","):
-            name_cat = part.strip()
-            if name_cat:
-                categories.append({"name": name_cat})
+        for part in categories_raw.split(","):
+            part = part.strip()
+            if part:
+                categories.append({"name": part})
 
-    # Tags
-    tags_raw = normalized.get("tags") or ""
-    tags = []
+    tags_raw = _first_non_empty(row, ["Tags", "etiquetas", "tags"])
+    tags: List[Dict[str, str]] = []
     if tags_raw:
-        for part in tags_raw.replace("|", ",").split(","):
-            tag_name = part.strip()
-            if tag_name:
-                tags.append({"name": tag_name})
+        for part in tags_raw.split(","):
+            part = part.strip()
+            if part:
+                tags.append({"name": part})
 
-    # Imagens
-    images_raw = (
-        normalized.get("images")
-        or normalized.get("imagens")
-        or normalized.get("image")
-        or ""
-    )
-    images = []
+    images_raw = _first_non_empty(row, ["Images", "images", "imagens"])
+    images: List[Dict[str, str]] = []
     if images_raw:
-        for url in images_raw.split(","):
+        sep = "|" if "|" in images_raw else ","
+        for url in images_raw.split(sep):
             url = url.strip()
             if url:
                 images.append({"src": url})
 
-    product_type = (
-        normalized.get("type")
-        or normalized.get("tipo")
-        or "simple"
-    )
+    meta_data = [
+        {"key": "_ctctech_button_text", "value": cfg["button_text"]},
+        {"key": "_ctctech_currency", "value": cfg["currency"]},
+    ]
 
-    meta_data = []
-
-    # Guarda texto padrão do botão, se quiser usar depois
-    if cfg.get("button_text"):
-        meta_data.append(
-            {"key": "_ctctech_button_text", "value": cfg["button_text"]}
-        )
-
-    if cfg.get("currency"):
-        meta_data.append(
-            {"key": "_ctctech_currency", "value": cfg["currency"]}
-        )
-
-    product = {
+    product: Dict[str, object] = {
         "name": name,
-        "type": product_type,
-        "regular_price": str(regular_price),
-        "sku": sku or "",
+        "type": "simple",
+        "regular_price": f"{regular_price:.2f}",
         "description": description,
         "short_description": short_description,
+        "sku": sku or "",
         "categories": categories,
         "tags": tags,
         "images": images,
         "meta_data": meta_data,
     }
 
-    if sale_price:
-        product["sale_price"] = str(sale_price)
+    if sale_price > 0 and sale_price < regular_price:
+        product["sale_price"] = f"{sale_price:.2f}"
 
     return product
 
 
-def load_products_from_csv(path: str, cfg: Dict[str, str]) -> List[Dict]:
-    logging.info(f"Lendo CSV local: {path}")
+def download_feed(url: str, cfg: Dict[str, str]) -> List[Dict]:
+    logging.info("Baixando feed CSV: %s", url)
+    try:
+        resp = requests.get(url, timeout=120)
+        resp.raise_for_status()
+    except Exception as e:
+        logging.error("Erro ao baixar feed %s: %s", url, e)
+        return []
+
+    lines = resp.text.splitlines()
+    if not lines:
+        logging.warning("Feed vazio: %s", url)
+        return []
+
+    reader = csv.DictReader(lines)
     products: List[Dict] = []
-
-    with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            p = parse_product_row(row, cfg)
-            if p:
-                products.append(p)
-
-    logging.info(f"Encontrados {len(products)} produtos válidos em {path}")
-    return products
-
-
-def load_products_from_remote_csv(url: str, cfg: Dict[str, str]) -> List[Dict]:
-    logging.info(f"Baixando feed remoto: {url}")
-    resp = requests.get(url, timeout=120)
-    resp.raise_for_status()
-
-    products: List[Dict] = []
-    f = io.StringIO(resp.text)
-    reader = csv.DictReader(f)
-
     for row in reader:
         p = parse_product_row(row, cfg)
         if p:
             products.append(p)
 
-    logging.info(f"Encontrados {len(products)} produtos válidos em {url}")
+    logging.info("Feed %s gerou %d produtos válidos.", url, len(products))
     return products
 
 
+def dedupe_cheapest(products: List[Dict]) -> List[Dict]:
+    """Mantém apenas o produto mais barato por SKU."""
+    best_by_sku: Dict[str, Dict] = {}
+
+    def price_of(p: Dict) -> float:
+        sale = p.get("sale_price")
+        regular = p.get("regular_price")
+
+        def _to_f(x):
+            try:
+                return float(x)
+            except (TypeError, ValueError):
+                return 0.0
+
+        if sale:
+            return _to_f(sale)
+        return _to_f(regular)
+
+    for p in products:
+        sku = (p.get("sku") or "").strip()
+        key = sku or f"__no_sku__{p.get('name','')}"
+        if key not in best_by_sku:
+            best_by_sku[key] = p
+        else:
+            if price_of(p) < price_of(best_by_sku[key]):
+                best_by_sku[key] = p
+
+    result = list(best_by_sku.values())
+    logging.info("Após deduplicação por preço/sku, restaram %d produtos.", len(result))
+    return result
+
+
 def send_to_woocommerce(products: List[Dict], cfg: Dict[str, str]) -> None:
-    """Envia produtos para o WooCommerce via /products/batch."""
     if not products:
-        logging.info("Nenhum produto para enviar ao WooCommerce.")
+        logging.warning("Nenhum produto para enviar ao WooCommerce.")
         return
 
     base_url = cfg["base_url"]
@@ -213,73 +202,58 @@ def send_to_woocommerce(products: List[Dict], cfg: Dict[str, str]) -> None:
 
     url = f"{base_url}/wp-json/wc/v3/products/batch"
 
-    # WooCommerce aceita batch de até ~100 por vez com segurança
     batch_size = 50
     total = len(products)
     sent = 0
 
     for i in range(0, total, batch_size):
-        chunk = products[i : i + batch_size]
-        payload = {"create": chunk}
-
+        batch = products[i : i + batch_size]
+        payload = {"create": batch}
         logging.info(
-            f"Enviando lote {i // batch_size + 1} com {len(chunk)} produtos..."
-        )
-
-        resp = requests.post(
-            url,
-            auth=(ck, cs),
-            json=payload,
-            timeout=120,
+            "Enviando lote %d/%d com %d produtos...",
+            i // batch_size + 1,
+            (total + batch_size - 1) // batch_size,
+            len(batch),
         )
         try:
+            resp = requests.post(
+                url,
+                auth=(ck, cs),
+                json=payload,
+                timeout=300,
+            )
             resp.raise_for_status()
-        except requests.HTTPError as e:
+        except Exception as e:
             logging.error("Erro ao enviar lote para WooCommerce: %s", e)
-            logging.error("Resposta: %s", resp.text)
+            if hasattr(e, "response") and getattr(e, "response") is not None:
+                logging.error("Resposta: %s", e.response.text)
             raise
 
         data = resp.json()
         created = data.get("create", [])
         sent += len(created)
-        logging.info(f"Lote enviado com sucesso. Criados {len(created)} produtos.")
+        logging.info("Lote enviado com sucesso. Criados %d produtos.", len(created))
 
-    logging.info(f"Envio concluído. Total de produtos criados: {sent}.")
+    logging.info("Envio concluído. Total de produtos criados: %d", sent)
 
 
 def main() -> None:
     logging.info("Iniciando migração automática de produtos afiliados...")
 
     cfg = get_config()
-    csv_files = find_csv_files()
-    source_urls = get_source_urls()
-
-    if not csv_files and not source_urls:
-        print("Sem dados nos CSVs.")
-        logging.warning(
-            "Nenhum arquivo CSV local em %s e nenhuma URL em fontes.txt.",
-            DATA_DIR,
-        )
-        return
 
     all_products: List[Dict] = []
-
-    # CSVs locais (ex.: shein.csv)
-    for path in csv_files:
-        prods = load_products_from_csv(path, cfg)
-        all_products.extend(prods)
-
-    # Feeds remotos (Amazon, Shopee, Mercado Livre, AliExpress etc.)
-    for url in source_urls:
-        prods = load_products_from_remote_csv(url, cfg)
+    for url in FEED_URLS:
+        prods = download_feed(url, cfg)
         all_products.extend(prods)
 
     if not all_products:
-        print("Sem produtos válidos encontrados nos feeds.")
-        logging.warning("Feeds processados, mas sem produtos válidos.")
+        logging.warning("Nenhum produto válido encontrado em nenhum feed.")
+        print("Sem dados nos feeds CSV.")
         return
 
-    send_to_woocommerce(all_products, cfg)
+    final_products = dedupe_cheapest(all_products)
+    send_to_woocommerce(final_products, cfg)
     logging.info("Migração concluída com sucesso.")
 
 
