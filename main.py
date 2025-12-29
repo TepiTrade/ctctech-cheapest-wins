@@ -1,25 +1,24 @@
-import ssl
-import socket
-import http.client
+import urllib3
 
 def run():
-    # Força o uso de protocolos de segurança modernos para evitar o Handshake Failure
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    context.set_ciphers('DEFAULT@SECLEVEL=1')
+    # Cria um gerenciador de conexões que ignora erros de certificado e força TLS moderno
+    http = urllib3.PoolManager(
+        cert_reqs='CERT_NONE',
+        assert_hostname=False
+    )
+    
+    url = "https://ctctech.store/wp-admin/admin.php?page=bot-captura-ctctech&run=capture"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*'
+    }
 
     try:
-        conn = http.client.HTTPSConnection("ctctech.store", port=443, context=context, timeout=30)
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        conn.request("GET", "/wp-admin/admin.php?page=bot-captura-ctctech&run=capture", headers=headers)
-        
-        response = conn.getresponse()
+        response = http.request('GET', url, headers=headers, timeout=30.0)
         print(f"Status: {response.status} {response.reason}")
+        print(f"Resposta: {response.data.decode('utf-8')[:100]}")
     except Exception as e:
-        print(f"Erro de Conexao: {e}")
-    finally:
-        conn.close()
+        print(f"Erro de Conexao Final: {e}")
 
 if __name__ == "__main__":
     run()
