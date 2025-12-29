@@ -1,17 +1,17 @@
-import requests
-import urllib3
-
-# Desabilita avisos de certificados inseguros
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import http.client
+import ssl
 
 def run():
-    url = "https://ctctech.store/wp-admin/admin.php?page=bot-captura-ctctech&run=capture"
+    context = ssl._create_unverified_context()
+    conn = http.client.HTTPSConnection("ctctech.store", context=context)
     try:
-        # verify=False ignora o erro de handshake do SSL
-        response = requests.get(url, timeout=60, verify=False)
-        print(f"Status: {response.status_code}")
+        conn.request("GET", "/wp-admin/admin.php?page=bot-captura-ctctech&run=capture")
+        response = conn.getresponse()
+        print(f"Status: {response.status} {response.reason}")
     except Exception as e:
         print(f"Erro: {e}")
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     run()
