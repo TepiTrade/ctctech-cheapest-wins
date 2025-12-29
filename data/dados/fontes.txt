@@ -1,6 +1,6 @@
-https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds%20de%20amostra/aliexpress.csv
-https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds%20de%20amostra/amazon.csv
-https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds%20de%20amostra/mercadolivre.csv
-https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds%20de%20amostra/shopee.csv
-https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds%20de%20amostra/temu.csv
-https://raw.githubusercontent.com/TepiTrade/ctctech-cheapest-wins/main/dados/feeds%20de%20amostra/shein.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/dados/feeds_de_amostra/amazon.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/dados/feeds_de_amostra/aliexpress.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/dados/feeds_de_amostra/shopee.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/dados/feeds_de_amostra/mercadolivre.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/dados/feeds_de_amostra/temu.csv
+https://raw.githubusercontent.com/TepiTrade/ctctech-mais-barato-vence/main/dados/dados/shein.csv
