@@ -1,24 +1,24 @@
 import urllib3
 
 def run():
-    # Usando PoolManager para gerenciar a requisição de forma simples
-    http = urllib3.PoolManager()
+    # Forçamos o urllib3 a ignorar completamente o SSL e não tentar redirecionar para HTTPS
+    http = urllib3.PoolManager(cert_reqs='CERT_NONE', assert_hostname=False)
     
-    # Mudamos para http:// para evitar o erro de SSL/Handshake do seu servidor
+    # Usamos o IP ou o domínio direto em HTTP simples
     url = "http://ctctech.store/wp-admin/admin.php?page=bot-captura-ctctech&run=capture"
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Host': 'ctctech.store'
+        'User-Agent': 'Mozilla/5.0',
+        'Connection': 'close'
     }
 
     try:
-        # Aumentamos o timeout para garantir que o servidor processe a captura
-        response = http.request('GET', url, headers=headers, timeout=60.0)
+        # O parâmetro redirect=False impede que o site te jogue de volta para o erro de SSL
+        response = http.request('GET', url, headers=headers, timeout=30.0, redirect=False)
         print(f"Status: {response.status}")
-        print(f"Sucesso: O comando foi entregue ao site.")
+        print("Conexão estabelecida com sucesso via HTTP.")
     except Exception as e:
-        print(f"Erro ao conectar via HTTP: {e}")
+        print(f"Erro detectado: {e}")
 
 if __name__ == "__main__":
     run()
