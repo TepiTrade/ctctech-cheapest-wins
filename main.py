@@ -1,24 +1,28 @@
-import urllib3
+import urllib.request
+import ssl
 
 def run():
-    # Forçamos o urllib3 a ignorar completamente o SSL e não tentar redirecionar para HTTPS
-    http = urllib3.PoolManager(cert_reqs='CERT_NONE', assert_hostname=False)
-    
-    # Usamos o IP ou o domínio direto em HTTP simples
-    url = "http://ctctech.store/wp-admin/admin.php?page=bot-captura-ctctech&run=capture"
+    # Cria um contexto SSL que aceita cifras antigas e modernas, ignorando erros de certificado
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.set_ciphers('DEFAULT@SECLEVEL=1') # Reduz o nível de exigência para compatibilidade total
+
+    url = "https://ctctech.store/wp-admin/admin.php?page=bot-captura-ctctech&run=capture"
     
     headers = {
-        'User-Agent': 'Mozilla/5.0',
-        'Connection': 'close'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
     }
 
     try:
-        # O parâmetro redirect=False impede que o site te jogue de volta para o erro de SSL
-        response = http.request('GET', url, headers=headers, timeout=30.0, redirect=False)
-        print(f"Status: {response.status}")
-        print("Conexão estabelecida com sucesso via HTTP.")
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, context=ctx, timeout=60) as response:
+            status = response.getcode()
+            print(f"Status: {status}")
+            print("Sucesso: Bot conectado e comando enviado ao site.")
     except Exception as e:
-        print(f"Erro detectado: {e}")
+        print(f"Erro de Conexão Robusta: {e}")
 
 if __name__ == "__main__":
     run()
